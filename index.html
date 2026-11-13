@@ -131,10 +131,10 @@
     <form method="dialog" class="dialog-close-form"><button class="icon-button" aria-label="Cerrar">×</button></form>
     <div class="dialog-icon" aria-hidden="true">⚙️</div>
     <div class="eyebrow">Acceso de administración</div>
-    <h2 id="pin-title">Ingresá el PIN</h2>
-    <p>El PIN inicial es <strong>4949</strong>. Podés cambiarlo desde la configuración.</p>
-    <label class="field-label" for="admin-pin-entry">PIN de administrador</label>
-    <input id="admin-pin-entry" type="password" inputmode="numeric" maxlength="12" autocomplete="current-password">
+    <h2 id="pin-title">Ingresá la contraseña</h2>
+    <p>La contraseña inicial es <strong>4949</strong>. Podés cambiarla desde la configuración.</p>
+    <label class="field-label" for="admin-pin-entry">Contraseña de administrador</label>
+    <input id="admin-pin-entry" type="password" maxlength="64" autocomplete="current-password">
     <p class="pin-error" id="pin-error" role="alert"></p>
     <button class="button button-primary button-large full-button" id="pin-submit" type="button">Entrar</button>
   </dialog>
@@ -188,13 +188,14 @@
           <div class="settings-pair"><div><label class="field-label" for="setting-questions">Preguntas por partida</label><input id="setting-questions" type="number" min="1" max="100"></div><div><label class="field-label" for="setting-seconds">Segundos por pregunta</label><input id="setting-seconds" type="number" min="5" max="180"></div></div>
           <div class="settings-pair"><div><label class="field-label" for="setting-correct">Puntos por acierto</label><input id="setting-correct" type="number" min="0" max="20"></div><div><label class="field-label" for="setting-incorrect">Puntos por error</label><input id="setting-incorrect" type="number" min="-20" max="20"></div></div>
         </section>
-        <section class="admin-box"><div class="eyebrow">Acceso</div><h3>PIN de administrador</h3>
-          <label class="field-label" for="setting-pin">Nuevo PIN</label><input id="setting-pin" type="password" maxlength="12" inputmode="numeric" autocomplete="new-password">
-          <p class="form-hint">El PIN es una barrera sencilla en este navegador. En un sitio público, el panel no tiene seguridad de servidor.</p>
+        <section class="admin-box"><div class="eyebrow">Acceso</div><h3>Contraseña de administrador</h3>
+          <label class="field-label" for="setting-pin">Nueva contraseña de administrador</label><input id="setting-pin" type="password" maxlength="64" autocomplete="new-password">
+          <p class="form-hint">Con la hoja compartida, el cambio se guarda para todos los dispositivos. Sin conexión compartida, el PIN queda en este navegador.</p>
         </section>
         <section class="admin-box sheet-box"><div class="eyebrow">Puntajes compartidos</div><h3>Conectar Google Sheets</h3>
-          <p>Creá el servicio siguiendo <strong>GUIA-GOOGLE-SHEETS.md</strong> y pegá acá la URL de implementación.</p>
+          <p>Para usar la misma hoja y el mismo banco en todos los dispositivos, configurá una sola vez la URL `/exec` en <code>window.PREGUNTADO_API_URL</code> dentro de <code>preguntas.js</code> y volvé a publicar.</p>
           <label class="field-label" for="setting-sheet-url">URL del servicio</label><input id="setting-sheet-url" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="url">
+          <p class="form-hint">Pegada aquí, la URL sirve en este navegador. La versión publicada debe llevarla en `preguntas.js` para que todos la reciban.</p>
           <div class="button-row"><button class="button button-primary" id="save-settings" type="button">Guardar configuración</button><button class="button button-outline" id="test-sheet" type="button">Probar conexión</button></div>
           <p class="form-hint" id="sheet-test-result" role="status"></p>
         </section>
