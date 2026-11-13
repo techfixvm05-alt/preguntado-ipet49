@@ -509,10 +509,7 @@
     try {
       sheetErrorMessage = '';
       await postThroughForm(endpoint, { action: 'score', ...result });
-      const confirmation = await jsonp(endpoint, { action: 'check', id: result.id });
-      if (confirmation.error) throw new Error(confirmation.error);
-      if (!confirmation.exists) throw new Error('La hoja no confirmó este puntaje. Revisá el script y volvé a implementarlo.');
-      return true;
+      return await confirmScore(endpoint, result.id);
     } catch (error) {
       console.warn('No se pudo enviar el puntaje a Google Sheets.', error);
       sheetErrorMessage = error.message || 'Error de conexión.';
@@ -520,49 +517,38 @@
     }
   }
 
-  function postThroughForm(url, payload) {
-    return new Promise((resolve, reject) => {
-      const frameName = makeId('ranking-frame').replace(/[^A-Za-z0-9_]/g, '_');
-      const frame = document.createElement('iframe');
-      frame.name = frameName;
-      frame.title = 'Envío de puntaje';
-      frame.style.display = 'none';
-      const form = document.createElement('form');
-      form.method = 'POST';
-      form.action = url;
-      form.target = frameName;
-      form.enctype = 'application/x-www-form-urlencoded';
-      form.style.display = 'none';
-      const input = document.createElement('input');
-      input.type = 'hidden';
-      input.name = 'payload';
-      input.value = JSON.stringify(payload);
-      form.append(input);
-      let sent = false;
-      let finished = false;
-      const timeout = setTimeout(() => {
-        if (finished) return;
-        finished = true;
-        frame.remove();
-        form.remove();
-        reject(new Error('Apps Script no respondió al envío.'));
-      }, 15000);
-      frame.addEventListener('load', () => {
-        if (!sent) {
-          sent = true;
-          form.submit();
-          return;
-        }
-        if (finished) return;
-        finished = true;
-        clearTimeout(timeout);
-        frame.remove();
-        form.remove();
-        resolve();
+  async function postThroughForm(url, payload) {
+    const body = new URLSearchParams();
+    body.set('payload', JSON.stringify(payload));
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20000);
+    try {
+      // Apps Script no habilita CORS para POST. no-cors permite enviar el
+      // formulario simple; el resultado se verifica luego con una lectura JSONP.
+      await fetch(url, {
+        method: 'POST',
+        mode: 'no-cors',
+        body,
+        signal: controller.signal
       });
-      document.body.append(frame, form);
-      frame.src = 'about:blank';
-    });
+    } catch (error) {
+      if (error.name === 'AbortError') throw new Error('Google Sheets tardó demasiado en recibir el cambio.');
+      throw new Error('No se pudo enviar el cambio a Google Sheets. Revisá la conexión.');
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  const pause = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+  async function confirmScore(endpoint, id) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const confirmation = await jsonp(endpoint, { action: 'check', id });
+      if (confirmation.error) throw new Error(confirmation.error);
+      if (confirmation.exists) return true;
+      if (attempt < 4) await pause(350 + attempt * 500);
+    }
+    throw new Error('La hoja no confirmó este puntaje. Revisá el script y volvé a implementarlo.');
   }
 
   function jsonp(url, parameters = {}) {
@@ -655,9 +641,16 @@
     }
     sharedConfig.sharedRevision = revision;
     await postThroughForm(endpoint, { action: 'config', pinHash: adminSessionHash, config: sharedConfig });
-    const response = await jsonp(endpoint, { action: 'config', revision });
-    if (response.error) throw new Error(response.error);
-    if (response.config?.sharedRevision !== revision) throw new Error('Google Sheets no confirmó los cambios compartidos.');
+    let response;
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      response = await jsonp(endpoint, { action: 'config', revision });
+      if (response.error) throw new Error(response.error);
+      if (response.config?.sharedRevision === revision) break;
+      if (attempt < 5) await pause(350 + attempt * 500);
+    }
+    if (response?.config?.sharedRevision !== revision) {
+      throw new Error('Google Sheets recibió el envío, pero no confirmó el guardado. Volvé a publicar el Apps Script y reintentá.');
+    }
     config.sharedRevision = revision;
     localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
     sharedBankStatus = '';
