@@ -4,6 +4,7 @@
   const CONFIG_KEY = 'preguntado-ipet49-config-v1';
   const RANKING_KEY = 'preguntado-ipet49-ranking-v1';
   const DEFAULT_DATA = structuredClone(window.PREGUNTADO_DATA);
+  const STATIC_API_URL = String(window.PREGUNTADO_API_URL || '').trim();
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -23,6 +24,15 @@
   let toastTimeout = null;
   let cloudRanking = null;
   let sheetErrorMessage = '';
+  let adminSessionHash = '';
+  let sharedBankStatus = '';
+  let sharedStateLoading = false;
+  let sharedSaveChain = Promise.resolve();
+  let startingGame = false;
+
+  function getApiEndpoint() {
+    return STATIC_API_URL || String(config?.settings?.sheetEndpoint || '').trim();
+  }
 
   function loadConfig() {
     try {
@@ -49,10 +59,18 @@
   }
 
   function saveConfig(message = '') {
+    if (STATIC_API_URL) config.settings.sheetEndpoint = STATIC_API_URL;
     localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
     renderHome();
     refreshRankingStatus();
     if (message) showToast(message);
+    if (adminSessionHash && getApiEndpoint()) {
+      sharedSaveChain = sharedSaveChain.then(() => publishSharedConfig()).catch((error) => {
+        sharedBankStatus = `No se compartieron los cambios: ${error.message}`;
+        $('#settings-saved-status').textContent = sharedBankStatus;
+        showToast(sharedBankStatus);
+      });
+    }
   }
 
   function localRanking() {
@@ -82,8 +100,8 @@
     $('#home-subtitle').textContent = settings.subtitle || '';
     $('#stat-roulettes').textContent = String(config.roulettes.length);
     $('#stat-questions').textContent = String(settings.questionsPerGame);
-    $('#home-message').textContent = config.roulettes.length ? 'Podés jugar desde el celular o la computadora.' : 'Agregá al menos una ruleta desde Administración.';
-    $('#start-game').disabled = config.roulettes.length === 0;
+    $('#home-message').textContent = sharedBankStatus || (config.roulettes.length ? 'Podés jugar desde el celular o la computadora.' : 'Agregá al menos una ruleta desde Administración.');
+    $('#start-game').disabled = config.roulettes.length === 0 || sharedStateLoading;
   }
 
   function showScreen(screenId) {
@@ -464,13 +482,13 @@
     $('#finish-name').textContent = game.player;
     $('#finish-score').textContent = String(game.score);
     $('#finish-summary').textContent = `Respondiste bien ${game.correct} de ${game.answered} preguntas en ${activeRoulette?.name || 'la ruleta'}.`;
-    $('#result-sync').textContent = config.settings.sheetEndpoint ? 'Enviando puntaje a Google Sheets…' : 'Puntaje guardado en este dispositivo.';
-    $('#result-sync').classList.toggle('connected', !config.settings.sheetEndpoint);
+    $('#result-sync').textContent = getApiEndpoint() ? 'Enviando puntaje a Google Sheets…' : 'Puntaje guardado en este dispositivo.';
+    $('#result-sync').classList.toggle('connected', !getApiEndpoint());
     showScreen('screen-finish');
     renderRanking();
     game = null;
     currentQuestion = null;
-    if (config.settings.sheetEndpoint) {
+    if (getApiEndpoint()) {
       const sent = await postResult(result);
       if (sent) {
         $('#result-sync').textContent = 'Puntaje enviado a Google Sheets.';
@@ -486,7 +504,7 @@
   }
 
   async function postResult(result) {
-    const endpoint = String(config.settings.sheetEndpoint || '').trim();
+    const endpoint = getApiEndpoint();
     if (!endpoint) return false;
     try {
       sheetErrorMessage = '';
@@ -581,7 +599,7 @@
   }
 
   async function fetchSheetRanking() {
-    const endpoint = String(config.settings.sheetEndpoint || '').trim();
+    const endpoint = getApiEndpoint();
     if (!endpoint) return null;
     const data = await jsonp(endpoint, { action: 'ranking' });
     if (data?.error) throw new Error(data.error);
@@ -595,6 +613,93 @@
       roulette: String(row.roulette || row.ruleta || ''),
       date: String(row.date || row.fecha || '')
     }));
+  }
+
+  async function hashPin(pin) {
+    if (!window.crypto?.subtle) throw new Error('El PIN compartido requiere abrir el sitio por HTTPS.');
+    const bytes = new TextEncoder().encode(String(pin));
+    const digest = await window.crypto.subtle.digest('SHA-256', bytes);
+    return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+  }
+
+  function mergeSharedConfig(remoteConfig) {
+    const endpoint = getApiEndpoint();
+    const merged = {
+      ...structuredClone(DEFAULT_DATA),
+      ...remoteConfig,
+      settings: {
+        ...DEFAULT_DATA.settings,
+        ...(remoteConfig.settings || {}),
+        adminPin: DEFAULT_DATA.settings.adminPin,
+        sheetEndpoint: endpoint
+      },
+      roulettes: remoteConfig.roulettes.map((roulette) => ({
+        ...roulette,
+        categories: (roulette.categories || []).map((category) => ({
+          ...category,
+          questions: Array.isArray(category.questions) ? category.questions : []
+        }))
+      }))
+    };
+    return merged;
+  }
+
+  async function publishSharedConfig({ quiet = false } = {}) {
+    const endpoint = getApiEndpoint();
+    if (!endpoint || !adminSessionHash) throw new Error('Volvé a ingresar el PIN de administración.');
+    const revision = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const sharedConfig = structuredClone(config);
+    if (sharedConfig.settings) {
+      delete sharedConfig.settings.adminPin;
+      delete sharedConfig.settings.sheetEndpoint;
+    }
+    sharedConfig.sharedRevision = revision;
+    await postThroughForm(endpoint, { action: 'config', pinHash: adminSessionHash, config: sharedConfig });
+    const response = await jsonp(endpoint, { action: 'config', revision });
+    if (response.error) throw new Error(response.error);
+    if (response.config?.sharedRevision !== revision) throw new Error('Google Sheets no confirmó los cambios compartidos.');
+    config.sharedRevision = revision;
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+    sharedBankStatus = '';
+    if (!quiet) {
+      $('#settings-saved-status').textContent = 'Cambios guardados para todos los dispositivos.';
+      showToast('Cambios publicados para todos.');
+    }
+    return true;
+  }
+
+  async function loadSharedState() {
+    const endpoint = getApiEndpoint();
+    if (!endpoint) return;
+    sharedStateLoading = true;
+    renderHome();
+    try {
+      const response = await jsonp(endpoint, { action: 'config' });
+      if (response.error) throw new Error(response.error);
+      if (!Object.prototype.hasOwnProperty.call(response, 'config')) {
+        throw new Error('Apps Script está desactualizado. Reemplazá Code.gs y publicá una nueva versión.');
+      }
+      if (response.config) {
+        config = mergeSharedConfig(response.config);
+        selectedRouletteId = config.roulettes[0]?.id || '';
+        selectedCategoryId = config.roulettes[0]?.categories[0]?.id || '';
+        localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+        sharedBankStatus = '';
+        renderHome();
+      }
+    } catch (error) {
+      sharedBankStatus = `No se pudo sincronizar el banco: ${error.message}`;
+      renderHome();
+    }
+    try {
+      cloudRanking = await fetchSheetRanking();
+    } catch (error) {
+      cloudRanking = null;
+      if (!sharedBankStatus) sharedBankStatus = `No se pudo cargar el ranking: ${error.message}`;
+    }
+    renderRanking();
+    sharedStateLoading = false;
+    renderHome();
   }
 
   async function refreshRanking() {
@@ -619,7 +724,7 @@
   }
 
   function renderRanking() {
-    const entries = cloudRanking ? sortRanking([...cloudRanking, ...localRanking()]) : sortRanking(localRanking());
+    const entries = cloudRanking !== null ? sortRanking(cloudRanking) : sortRanking(localRanking());
     const list = $('#ranking-list');
     list.replaceChildren();
     entries.slice(0, 10).forEach((entry, index) => {
@@ -643,7 +748,7 @@
   }
 
   function refreshRankingStatus() {
-    const connected = Boolean(config.settings.sheetEndpoint);
+    const connected = Boolean(getApiEndpoint());
     $('#ranking-dot').classList.toggle('connected', connected && cloudRanking !== null);
     if (connected && cloudRanking === null) $('#ranking-connection').textContent = 'Google Sheets configurado';
     else if (connected) $('#ranking-connection').textContent = 'Conectado a Google Sheets';
@@ -658,7 +763,7 @@
     } else {
       $('#ranking-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
-    if (config.settings.sheetEndpoint) refreshRanking();
+    if (getApiEndpoint()) refreshRanking();
   }
 
   function closeRanking() {
@@ -668,7 +773,7 @@
   }
 
   function exportRankingCsv() {
-    const entries = sortRanking(cloudRanking ? [...cloudRanking, ...localRanking()] : localRanking());
+    const entries = sortRanking(cloudRanking !== null ? cloudRanking : localRanking());
     if (!entries.length) {
       showToast('Todavía no hay puntajes para descargar.');
       return;
@@ -704,16 +809,50 @@
     setTimeout(() => $('#admin-pin-entry').focus(), 60);
   }
 
-  function enterAdmin() {
+  async function enterAdmin() {
     const pin = $('#admin-pin-entry').value;
-    if (pin !== String(config.settings.adminPin || '4949')) {
-      $('#pin-error').textContent = 'El PIN no coincide. Probá otra vez.';
+    const button = $('#pin-submit');
+    button.disabled = true;
+    $('#pin-error').textContent = '';
+    try {
+      const endpoint = getApiEndpoint();
+      if (endpoint) {
+        const candidateHash = await hashPin(pin);
+        const result = await jsonp(endpoint, { action: 'auth', pinHash: candidateHash });
+        if (result.error) throw new Error(result.error);
+        if (!Object.prototype.hasOwnProperty.call(result, 'authorized')) {
+          throw new Error('Apps Script está desactualizado. Reemplazá Code.gs y publicá una nueva versión.');
+        }
+        if (!result.authorized) throw new Error('La contraseña no coincide. Probá otra vez.');
+        adminSessionHash = candidateHash;
+        if (!result.configReady) await publishSharedConfig({ quiet: true });
+      } else {
+        if (pin !== String(config.settings.adminPin || '4949')) throw new Error('La contraseña no coincide. Probá otra vez.');
+        adminSessionHash = '';
+      }
+      $('#pin-dialog').close();
+      renderAdmin();
+      $('#admin-dialog').showModal();
+    } catch (error) {
+      $('#pin-error').textContent = error.message || 'No se pudo validar el PIN.';
       $('#admin-pin-entry').select();
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function changeAdminPin(newPin) {
+    const endpoint = getApiEndpoint();
+    if (!endpoint || !adminSessionHash) {
+      config.settings.adminPin = newPin;
       return;
     }
-    $('#pin-dialog').close();
-    renderAdmin();
-    $('#admin-dialog').showModal();
+    const newPinHash = await hashPin(newPin);
+    await postThroughForm(endpoint, { action: 'setPin', currentPinHash: adminSessionHash, newPinHash });
+    const confirmation = await jsonp(endpoint, { action: 'auth', pinHash: newPinHash });
+    if (confirmation.error) throw new Error(confirmation.error);
+    if (!confirmation.authorized) throw new Error('Google Sheets no confirmó el cambio del PIN.');
+    adminSessionHash = newPinHash;
   }
 
   function fillSelect(select, items, selectedId) {
@@ -864,10 +1003,11 @@
     $('#setting-incorrect').value = String(config.settings.pointsIncorrect ?? 0);
     $('#setting-pin').value = '';
     $('#setting-pin').placeholder = 'Dejar vacío para conservarlo';
-    $('#setting-sheet-url').value = config.settings.sheetEndpoint || '';
+    $('#setting-sheet-url').value = getApiEndpoint();
+    $('#setting-sheet-url').readOnly = Boolean(STATIC_API_URL);
   }
 
-  function saveSettings() {
+  async function saveSettings() {
     const title = $('#setting-title').value.trim();
     const subtitle = $('#setting-subtitle').value.trim();
     const questions = Number($('#setting-questions').value);
@@ -875,7 +1015,7 @@
     const correct = Number($('#setting-correct').value);
     const incorrect = Number($('#setting-incorrect').value);
     const pin = $('#setting-pin').value.trim();
-    const endpoint = $('#setting-sheet-url').value.trim();
+    const endpoint = STATIC_API_URL || $('#setting-sheet-url').value.trim();
     if (!title || !Number.isInteger(questions) || questions < 1 || questions > 100 || !Number.isInteger(seconds) || seconds < 5 || seconds > 180 || !Number.isFinite(correct) || !Number.isFinite(incorrect)) {
       showToast('Revisá el título, la duración y los puntos.');
       return;
@@ -888,17 +1028,29 @@
         return;
       }
     }
+    if (pin && (pin.length < 4 || pin.length > 64)) {
+      showToast('La contraseña debe tener entre 4 y 64 caracteres.');
+      return;
+    }
+    if (pin) {
+      try {
+        await changeAdminPin(pin);
+      } catch (error) {
+        showToast(`No se pudo cambiar el PIN: ${error.message}`);
+        return;
+      }
+    }
     config.settings.title = title;
     config.settings.subtitle = subtitle;
     config.settings.questionsPerGame = questions;
     config.settings.secondsPerQuestion = seconds;
     config.settings.pointsCorrect = correct;
     config.settings.pointsIncorrect = incorrect;
-    if (pin) config.settings.adminPin = pin;
+    if (pin && !getApiEndpoint()) config.settings.adminPin = pin;
     config.settings.sheetEndpoint = endpoint;
     cloudRanking = null;
-    saveConfig('Configuración guardada en este navegador.');
-    $('#settings-saved-status').textContent = 'Cambios guardados.';
+    saveConfig(getApiEndpoint() && adminSessionHash ? 'Publicando cambios para todos…' : 'Configuración guardada en este navegador.');
+    $('#settings-saved-status').textContent = getApiEndpoint() && adminSessionHash ? 'Publicando cambios compartidos…' : 'Cambios guardados en este navegador.';
     renderSettingsEditor();
   }
 
@@ -996,7 +1148,9 @@
   }
 
   function exportData() {
-    downloadFile('banco-preguntas-ipet49.json', JSON.stringify(config, null, 2), 'application/json;charset=utf-8');
+    const exportConfig = structuredClone(config);
+    if (exportConfig.settings && getApiEndpoint()) delete exportConfig.settings.adminPin;
+    downloadFile('banco-preguntas-ipet49.json', JSON.stringify(exportConfig, null, 2), 'application/json;charset=utf-8');
     $('#backup-status').textContent = 'Se descargó una copia del banco y la configuración.';
   }
 
@@ -1051,10 +1205,10 @@
     }
     status.textContent = 'Probando conexión…';
     try {
-      const data = await jsonp(endpoint, { action: 'ranking' });
+      const data = await jsonp(endpoint, { action: 'config' });
       if (data?.error) throw new Error(data.error);
-      if (!Array.isArray(data) && !Array.isArray(data?.ranking)) throw new Error('Formato inesperado');
-      status.textContent = 'Lectura conectada. Una partida confirmará también el envío de puntajes.';
+      if (!Object.prototype.hasOwnProperty.call(data, 'config')) throw new Error('Apps Script está desactualizado. Reemplazá Code.gs y publicá una nueva versión.');
+      status.textContent = 'Conexión compartida lista. El banco, el PIN y el ranking usarán la misma hoja.';
       status.style.color = '#81eabf';
     } catch (error) {
       status.textContent = error.message || 'Revisá la URL, el ID de la hoja y los permisos de implementación.';
@@ -1068,7 +1222,8 @@
   }
 
   function bindEvents() {
-    $('#start-game').addEventListener('click', () => {
+    $('#start-game').addEventListener('click', async () => {
+      if (startingGame) return;
       const name = $('#player-name').value.trim();
       if (!name) {
         $('#home-message').textContent = 'Escribí tu nombre o apodo para empezar.';
@@ -1077,6 +1232,16 @@
         return;
       }
       $('#home-message').style.color = '';
+      if (getApiEndpoint()) {
+        startingGame = true;
+        $('#start-game').disabled = true;
+        try {
+          await loadSharedState();
+        } finally {
+          startingGame = false;
+          $('#start-game').disabled = config.roulettes.length === 0;
+        }
+      }
       showRouletteSelection();
     });
     $('#player-name').addEventListener('keydown', (event) => { if (event.key === 'Enter') $('#start-game').click(); });
@@ -1145,8 +1310,9 @@
     });
   }
 
+  sharedStateLoading = Boolean(getApiEndpoint());
   bindEvents();
   renderHome();
   renderRanking();
-  if (config.settings.sheetEndpoint) refreshRanking();
+  if (getApiEndpoint()) loadSharedState();
 })();
