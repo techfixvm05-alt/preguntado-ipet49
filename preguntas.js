@@ -1,3 +1,5 @@
+// Pegá aquí la URL /exec de Apps Script para compartirla con todos los dispositivos.
+window.https://script.google.com/macros/s/AKfycbw7yMelsIHrd6sjiF2EYATVXvirUe13UQ8dnVs3uLFRZ5SOXoAwAjypov_8H9myzFqmhg/exec = '';
 // Banco inicial editable desde el panel de administración.
 window.PREGUNTADO_DATA = {
   "schemaVersion": 1,
@@ -8,7 +10,6 @@ window.PREGUNTADO_DATA = {
     "secondsPerQuestion": 20,
     "pointsCorrect": 1,
     "pointsIncorrect": 0,
-    "adminPin": "4949",
     "sheetEndpoint": ""
   },
   "roulettes": [
