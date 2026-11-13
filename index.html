@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101b37">
+  <meta name="description" content="Juego de preguntas del IPET N°49 para celular y computadora.">
+  <title>Preguntado IPET N°49</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="ambient ambient-one" aria-hidden="true"></div>
+  <div class="ambient ambient-two" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <a class="brand" href="#inicio" id="home-link" aria-label="Volver al inicio">
+      <span class="brand-mark">49</span>
+      <span class="brand-copy"><strong>IPET N°49</strong><small>Preguntado</small></span>
+    </a>
+    <div class="top-actions">
+      <button class="button button-quiet" id="ranking-toggle" type="button" aria-expanded="false" aria-controls="ranking-panel">
+        <span aria-hidden="true">🏆</span><span>Ranking</span>
+      </button>
+      <button class="button button-quiet" id="admin-open" type="button">
+        <span aria-hidden="true">⚙️</span><span>Administrar</span>
+      </button>
+    </div>
+  </header>
+
+  <div class="app-shell">
+    <main class="main-column" id="main-content">
+      <section class="screen active" id="screen-home" aria-labelledby="home-title">
+        <div class="hero-card">
+          <div class="eyebrow"><span class="eyebrow-dot"></span> Un juego para aprender juntos</div>
+          <h1 id="home-title">Preguntado IPET N°49</h1>
+          <p class="hero-subtitle" id="home-subtitle">Girás la ruleta, respondés y aprendemos entre todos.</p>
+          <label class="field-label" for="player-name">¿Cómo te llamás?</label>
+          <div class="start-row">
+            <input id="player-name" type="text" maxlength="28" autocomplete="nickname" placeholder="Tu nombre o apodo">
+            <button class="button button-primary button-large" id="start-game" type="button">Empezar <span aria-hidden="true">→</span></button>
+          </div>
+          <p class="form-hint" id="home-message" role="status">Podés jugar desde el celular o la computadora.</p>
+          <div class="hero-stats" aria-label="Características del juego">
+            <div><strong id="stat-roulettes">4</strong><span>ruletas</span></div>
+            <div><strong id="stat-questions">20</strong><span>preguntas por partida</span></div>
+            <div><strong>🏛️</strong><span>museos e historias</span></div>
+          </div>
+        </div>
+        <div class="home-note"><span aria-hidden="true">✦</span><span>Elegí una ruleta y dejá que la suerte elija la categoría.</span></div>
+      </section>
+
+      <section class="screen" id="screen-roulette" aria-labelledby="roulette-title">
+        <div class="section-heading">
+          <div><div class="eyebrow">01 · Elegí el desafío</div><h2 id="roulette-title">¿Qué querés jugar?</h2></div>
+          <button class="button button-outline" type="button" data-go-home>Volver</button>
+        </div>
+        <div class="roulette-grid" id="roulette-grid"></div>
+      </section>
+
+      <section class="screen" id="screen-wheel" aria-labelledby="wheel-title">
+        <div class="section-heading wheel-heading">
+          <div><div class="eyebrow" id="wheel-eyebrow">02 · La ruleta</div><h2 id="wheel-title">¡A girar!</h2></div>
+          <button class="button button-outline" type="button" id="change-roulette">Cambiar ruleta</button>
+        </div>
+        <p class="wheel-caption" id="wheel-caption"></p>
+        <div class="wheel-layout">
+          <div class="wheel-wrap">
+            <div class="wheel-pointer" aria-hidden="true"></div>
+            <canvas id="wheel-canvas" width="640" height="640" role="img" aria-label="Ruleta de categorías"></canvas>
+            <button class="wheel-spin" id="spin-wheel" type="button"><span>GIRAR</span><small>la ruleta</small></button>
+          </div>
+          <div class="wheel-side">
+            <div class="wheel-tip"><span class="tip-icon" aria-hidden="true">✦</span><div><strong>Una categoría al azar</strong><p>La ruleta selecciona el tema de tu próxima pregunta.</p></div></div>
+            <div class="mini-score"><span>Tu puntaje</span><strong id="wheel-score">0</strong><small>puntos</small></div>
+            <div class="mini-score mini-progress"><span>Progreso</span><strong id="wheel-progress">0 / 20</strong><small>preguntas</small></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="screen" id="screen-question" aria-labelledby="question-text">
+        <div class="question-topline">
+          <span class="pill" id="question-category">Categoría</span>
+          <span class="timer-chip" id="timer-chip"><span aria-hidden="true">◷</span><strong id="time-left">20</strong><small>seg</small></span>
+        </div>
+        <div class="progress-track" aria-label="Avance de la partida"><span id="progress-fill"></span></div>
+        <div class="question-meta"><span id="question-count">Pregunta 1 de 20</span><span><span id="question-score">0</span> pts</span></div>
+        <h2 class="question-text" id="question-text" tabindex="-1"></h2>
+        <div class="answer-list" id="answer-list"></div>
+        <div class="answer-feedback" id="answer-feedback" aria-live="polite"></div>
+        <button class="button button-primary button-large next-button" id="next-question" type="button" hidden>Seguir <span aria-hidden="true">→</span></button>
+      </section>
+
+      <section class="screen" id="screen-finish" aria-labelledby="finish-title">
+        <div class="finish-card">
+          <div class="finish-badge" aria-hidden="true">🏆</div>
+          <div class="eyebrow">Partida terminada</div>
+          <h2 id="finish-title">¡Muy bien, <span id="finish-name">jugador</span>!</h2>
+          <p class="finish-score"><strong id="finish-score">0</strong><span>puntos</span></p>
+          <p class="finish-summary" id="finish-summary"></p>
+          <div class="sync-status" id="result-sync" role="status"></div>
+          <div class="finish-actions">
+            <button class="button button-primary button-large" id="play-again" type="button">Jugar otra vez</button>
+            <button class="button button-outline button-large" id="finish-ranking" type="button">Ver ranking</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <aside class="ranking-panel" id="ranking-panel" aria-label="Ranking local">
+      <div class="ranking-head">
+        <div><div class="eyebrow">Los mejores puntajes</div><h2>🏆 Ranking</h2></div>
+        <button class="icon-button ranking-close" id="ranking-close" type="button" aria-label="Cerrar ranking">×</button>
+      </div>
+      <div class="ranking-scope" id="ranking-scope">En este dispositivo</div>
+      <ol class="ranking-list" id="ranking-list"></ol>
+      <p class="ranking-empty" id="ranking-empty">Todavía no hay partidas. ¡Inaugurá el ranking!</p>
+      <div class="ranking-footer">
+        <span class="connection-dot" id="ranking-dot"></span>
+        <span id="ranking-connection">Ranking guardado en este dispositivo</span>
+      </div>
+      <button class="text-button" id="refresh-ranking" type="button">Actualizar ranking</button>
+    </aside>
+  </div>
+  <div class="mobile-scrim" id="mobile-scrim"></div>
+  <footer class="site-footer"><span>IPET N°49 · Aprender jugando</span><span>Hecho para celular y computadora</span></footer>
+
+  <dialog class="pin-dialog" id="pin-dialog" aria-labelledby="pin-title">
+    <form method="dialog" class="dialog-close-form"><button class="icon-button" aria-label="Cerrar">×</button></form>
+    <div class="dialog-icon" aria-hidden="true">⚙️</div>
+    <div class="eyebrow">Acceso de administración</div>
+    <h2 id="pin-title">Ingresá el PIN</h2>
+    <p>El PIN inicial es <strong>4949</strong>. Podés cambiarlo desde la configuración.</p>
+    <label class="field-label" for="admin-pin-entry">PIN de administrador</label>
+    <input id="admin-pin-entry" type="password" inputmode="numeric" maxlength="12" autocomplete="current-password">
+    <p class="pin-error" id="pin-error" role="alert"></p>
+    <button class="button button-primary button-large full-button" id="pin-submit" type="button">Entrar</button>
+  </dialog>
+
+  <dialog class="admin-dialog" id="admin-dialog" aria-labelledby="admin-title">
+    <div class="admin-topbar">
+      <div><div class="eyebrow">Herramientas del juego</div><h2 id="admin-title">Administración</h2></div>
+      <button class="icon-button" id="admin-close" type="button" aria-label="Cerrar administración">×</button>
+    </div>
+    <nav class="admin-tabs" aria-label="Secciones de administración">
+      <button class="admin-tab active" type="button" data-admin-tab="content">Ruletas y preguntas</button>
+      <button class="admin-tab" type="button" data-admin-tab="settings">Juego y ranking</button>
+      <button class="admin-tab" type="button" data-admin-tab="backup">Copias y datos</button>
+    </nav>
+
+    <section class="admin-view active" id="admin-view-content">
+      <div class="admin-toolbar">
+        <label class="field-label" for="admin-roulette-select">Ruleta</label>
+        <select id="admin-roulette-select"></select>
+        <label class="field-label" for="admin-roulette-name">Nombre de la ruleta</label>
+        <input id="admin-roulette-name" type="text" maxlength="48">
+        <button class="button button-soft" id="add-roulette" type="button">＋ Nueva ruleta</button>
+        <button class="button button-outline" id="rename-roulette" type="button">Guardar nombre</button>
+        <button class="button button-danger-outline" id="delete-roulette" type="button">Eliminar</button>
+      </div>
+      <div class="admin-columns">
+        <section class="admin-box category-box" aria-labelledby="category-tools-title">
+          <div class="admin-box-heading"><div><div class="eyebrow">Organizá el giro</div><h3 id="category-tools-title">Categorías</h3></div><button class="button button-soft" id="add-category" type="button">＋ Agregar</button></div>
+          <label class="field-label" for="admin-category-select">Categoría</label>
+          <select id="admin-category-select"></select>
+          <label class="field-label" for="category-name">Nombre y color</label>
+          <div class="category-edit-row"><input id="category-name" type="text" maxlength="42"><input id="category-color" type="color" aria-label="Color de la categoría"></div>
+          <div class="button-row"><button class="button button-primary" id="save-category" type="button">Guardar categoría</button><button class="button button-danger-outline" id="delete-category" type="button">Eliminar</button></div>
+          <p class="form-hint">Cada categoría es un sector de la ruleta.</p>
+        </section>
+        <section class="admin-box questions-box" aria-labelledby="question-tools-title">
+          <div class="admin-box-heading"><div><div class="eyebrow">Banco de preguntas</div><h3 id="question-tools-title">Preguntas</h3></div><button class="button button-soft" id="add-question" type="button">＋ Agregar pregunta</button></div>
+          <p class="form-hint" id="question-list-count"></p>
+          <div class="question-editor-list" id="question-editor-list"></div>
+        </section>
+      </div>
+    </section>
+
+    <section class="admin-view" id="admin-view-settings">
+      <div class="settings-grid">
+        <section class="admin-box"><div class="eyebrow">Presentación</div><h3>Nombre del juego</h3>
+          <label class="field-label" for="setting-title">Título</label><input id="setting-title" type="text" maxlength="56">
+          <label class="field-label" for="setting-subtitle">Mensaje de bienvenida</label><input id="setting-subtitle" type="text" maxlength="110">
+        </section>
+        <section class="admin-box"><div class="eyebrow">Ritmo</div><h3>Duración de la partida</h3>
+          <div class="settings-pair"><div><label class="field-label" for="setting-questions">Preguntas por partida</label><input id="setting-questions" type="number" min="1" max="100"></div><div><label class="field-label" for="setting-seconds">Segundos por pregunta</label><input id="setting-seconds" type="number" min="5" max="180"></div></div>
+          <div class="settings-pair"><div><label class="field-label" for="setting-correct">Puntos por acierto</label><input id="setting-correct" type="number" min="0" max="20"></div><div><label class="field-label" for="setting-incorrect">Puntos por error</label><input id="setting-incorrect" type="number" min="-20" max="20"></div></div>
+        </section>
+        <section class="admin-box"><div class="eyebrow">Acceso</div><h3>PIN de administrador</h3>
+          <label class="field-label" for="setting-pin">Nuevo PIN</label><input id="setting-pin" type="password" maxlength="12" inputmode="numeric" autocomplete="new-password">
+          <p class="form-hint">El PIN es una barrera sencilla en este navegador. En un sitio público, el panel no tiene seguridad de servidor.</p>
+        </section>
+        <section class="admin-box sheet-box"><div class="eyebrow">Puntajes compartidos</div><h3>Conectar Google Sheets</h3>
+          <p>Creá el servicio siguiendo <strong>GUIA-GOOGLE-SHEETS.md</strong> y pegá acá la URL de implementación.</p>
+          <label class="field-label" for="setting-sheet-url">URL del servicio</label><input id="setting-sheet-url" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="url">
+          <div class="button-row"><button class="button button-primary" id="save-settings" type="button">Guardar configuración</button><button class="button button-outline" id="test-sheet" type="button">Probar conexión</button></div>
+          <p class="form-hint" id="sheet-test-result" role="status"></p>
+        </section>
+      </div>
+      <div class="admin-save-row"><span id="settings-saved-status" role="status"></span><button class="button button-primary button-large" id="save-settings-bottom" type="button">Guardar configuración</button></div>
+    </section>
+
+    <section class="admin-view" id="admin-view-backup">
+      <div class="backup-grid">
+        <section class="admin-box"><div class="eyebrow">Respaldo del contenido</div><h3>Guardar o recuperar el banco</h3><p>Las preguntas y los cambios del panel se guardan en este navegador. Exportá una copia para llevarlos a otra computadora.</p>
+          <div class="button-row"><button class="button button-primary" id="export-data" type="button">Descargar banco JSON</button><label class="button button-outline file-button" for="import-data">Cargar banco JSON</label><input id="import-data" type="file" accept="application/json,.json" hidden></div>
+          <p class="form-hint" id="backup-status" role="status"></p>
+        </section>
+        <section class="admin-box"><div class="eyebrow">Resultados</div><h3>Descargar puntajes</h3><p>Guardá el ranking local como archivo CSV para abrirlo en Excel o cargarlo a una hoja.</p>
+          <button class="button button-primary" id="export-ranking" type="button">Descargar ranking CSV</button>
+          <p class="form-hint">Si conectaste Google Sheets, los resultados nuevos también se envían a la hoja.</p>
+        </section>
+        <section class="admin-box reset-box"><div class="eyebrow">Volver al banco original</div><h3>Restaurar contenido inicial</h3><p>Reemplaza las ruletas y preguntas editadas por la versión incluida en este paquete.</p>
+          <button class="button button-danger-outline" id="restore-defaults" type="button">Restaurar banco inicial</button>
+        </section>
+      </div>
+    </section>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="preguntas.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
