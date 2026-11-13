@@ -4,7 +4,7 @@
   const CONFIG_KEY = 'preguntado-ipet49-config-v1';
   const RANKING_KEY = 'preguntado-ipet49-ranking-v1';
   const DEFAULT_DATA = structuredClone(window.PREGUNTADO_DATA);
-  const STATIC_API_URL = String(window.PREGUNTADO_API_URL || '').trim();
+  const STATIC_API_URL = String(document.querySelector('meta[name="preguntado-api-url"]')?.content || window.PREGUNTADO_API_URL || '').trim();
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
