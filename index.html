@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#101b37">
   <meta name="description" content="Juego de preguntas del IPET N°49 para celular y computadora.">
+  <meta name="preguntado-api-url" content="https://script.google.com/macros/s/AKfycbw7yMelsIHrd6sjiF2EYATVXvirUe13UQ8dnVs3uLFRZ5SOXoAwAjypov_8H9myzFqmhg/exec">
   <title>Preguntado IPET N°49</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -193,9 +194,9 @@
           <p class="form-hint">Con la hoja compartida, el cambio se guarda para todos los dispositivos. Sin conexión compartida, el PIN queda en este navegador.</p>
         </section>
         <section class="admin-box sheet-box"><div class="eyebrow">Puntajes compartidos</div><h3>Conectar Google Sheets</h3>
-          <p>Para usar la misma hoja y el mismo banco en todos los dispositivos, configurá una sola vez la URL `/exec` en <code>window.PREGUNTADO_API_URL</code> dentro de <code>preguntas.js</code> y volvé a publicar.</p>
+          <p>Para usar la misma hoja y el mismo banco en todos los dispositivos, configurá una sola vez la URL `/exec` en la etiqueta <code>preguntado-api-url</code> de <code>index.html</code> y volvé a publicar.</p>
           <label class="field-label" for="setting-sheet-url">URL del servicio</label><input id="setting-sheet-url" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="url">
-          <p class="form-hint">Pegada aquí, la URL sirve en este navegador. La versión publicada debe llevarla en `preguntas.js` para que todos la reciban.</p>
+          <p class="form-hint">Pegada aquí, la URL sirve en este navegador. La versión publicada la lleva en la etiqueta `preguntado-api-url` de `index.html` para que todos la reciban.</p>
           <div class="button-row"><button class="button button-primary" id="save-settings" type="button">Guardar configuración</button><button class="button button-outline" id="test-sheet" type="button">Probar conexión</button></div>
           <p class="form-hint" id="sheet-test-result" role="status"></p>
         </section>
