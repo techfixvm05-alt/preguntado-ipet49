@@ -18,8 +18,11 @@
   let timerInterval = null;
   let wheelRotation = 0;
   let wheelAnimating = false;
+  let spinFrameId = null;
+  let questionTransitionTimer = null;
   let toastTimeout = null;
   let cloudRanking = null;
+  let sheetErrorMessage = '';
 
   function loadConfig() {
     try {
@@ -156,6 +159,7 @@
       rouletteId: roulette.id,
       usedQuestionIds: new Set()
     };
+    $('#end-game').hidden = false;
     wheelRotation = 0;
     $('#wheel-title').textContent = `Ruleta ${roulette.name}`;
     $('#wheel-caption').textContent = roulette.description || 'La ruleta elige una categoría para vos.';
@@ -295,16 +299,20 @@
       wheelRotation = startRotation + (endRotation - startRotation) * eased;
       updateWheel();
       if (progress < 1) {
-        requestAnimationFrame(animate);
+        spinFrameId = requestAnimationFrame(animate);
         return;
       }
+      spinFrameId = null;
       wheelRotation %= Math.PI * 2;
       wheelAnimating = false;
       $('#spin-wheel').disabled = false;
       updateWheel();
-      setTimeout(() => showQuestion(selectedCategory), 320);
+      questionTransitionTimer = setTimeout(() => {
+        questionTransitionTimer = null;
+        if (game) showQuestion(selectedCategory);
+      }, 320);
     }
-    requestAnimationFrame(animate);
+    spinFrameId = requestAnimationFrame(animate);
   }
 
   function showQuestion(category) {
@@ -404,6 +412,36 @@
     showScreen('screen-wheel');
   }
 
+  function cancelPendingQuestion() {
+    clearInterval(timerInterval);
+    if (spinFrameId !== null) cancelAnimationFrame(spinFrameId);
+    if (questionTransitionTimer !== null) clearTimeout(questionTransitionTimer);
+    spinFrameId = null;
+    questionTransitionTimer = null;
+    wheelAnimating = false;
+    $('#spin-wheel').disabled = false;
+  }
+
+  function endGameEarly() {
+    if (!game) return;
+    const hasAnswered = game.answered > 0;
+    const message = hasAnswered
+      ? '¿Querés terminar ahora? Se guardará el puntaje parcial de las preguntas respondidas.'
+      : '¿Querés terminar la partida? Todavía no hay respuestas y no se guardará un puntaje.';
+    if (!window.confirm(message)) return;
+    cancelPendingQuestion();
+    if (hasAnswered) {
+      finishGame();
+      return;
+    }
+    game = null;
+    currentQuestion = null;
+    activeRoulette = null;
+    $('#end-game').hidden = true;
+    showScreen('screen-home');
+    showToast('Partida terminada sin guardar puntaje.');
+  }
+
   function newResultId() {
     return window.crypto?.randomUUID ? crypto.randomUUID() : makeId('partida');
   }
@@ -411,6 +449,7 @@
   async function finishGame() {
     if (!game) return;
     clearInterval(timerInterval);
+    $('#end-game').hidden = true;
     const result = {
       id: newResultId(),
       name: game.player,
@@ -438,7 +477,9 @@
         $('#result-sync').classList.add('connected');
         setTimeout(refreshRanking, 900);
       } else {
-        $('#result-sync').textContent = 'No se pudo enviar. El puntaje quedó guardado en este dispositivo.';
+        $('#result-sync').textContent = sheetErrorMessage
+          ? `No se pudo confirmar el envío: ${sheetErrorMessage} El puntaje quedó guardado en este dispositivo.`
+          : 'No se pudo enviar. El puntaje quedó guardado en este dispositivo.';
         $('#result-sync').classList.remove('connected');
       }
     }
@@ -448,20 +489,65 @@
     const endpoint = String(config.settings.sheetEndpoint || '').trim();
     if (!endpoint) return false;
     try {
-      await fetch(endpoint, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'score', ...result })
-      });
+      sheetErrorMessage = '';
+      await postThroughForm(endpoint, { action: 'score', ...result });
+      const confirmation = await jsonp(endpoint, { action: 'check', id: result.id });
+      if (confirmation.error) throw new Error(confirmation.error);
+      if (!confirmation.exists) throw new Error('La hoja no confirmó este puntaje. Revisá el script y volvé a implementarlo.');
       return true;
     } catch (error) {
       console.warn('No se pudo enviar el puntaje a Google Sheets.', error);
+      sheetErrorMessage = error.message || 'Error de conexión.';
       return false;
     }
   }
 
-  function jsonp(url) {
+  function postThroughForm(url, payload) {
+    return new Promise((resolve, reject) => {
+      const frameName = makeId('ranking-frame').replace(/[^A-Za-z0-9_]/g, '_');
+      const frame = document.createElement('iframe');
+      frame.name = frameName;
+      frame.title = 'Envío de puntaje';
+      frame.style.display = 'none';
+      const form = document.createElement('form');
+      form.method = 'POST';
+      form.action = url;
+      form.target = frameName;
+      form.enctype = 'application/x-www-form-urlencoded';
+      form.style.display = 'none';
+      const input = document.createElement('input');
+      input.type = 'hidden';
+      input.name = 'payload';
+      input.value = JSON.stringify(payload);
+      form.append(input);
+      let sent = false;
+      let finished = false;
+      const timeout = setTimeout(() => {
+        if (finished) return;
+        finished = true;
+        frame.remove();
+        form.remove();
+        reject(new Error('Apps Script no respondió al envío.'));
+      }, 15000);
+      frame.addEventListener('load', () => {
+        if (!sent) {
+          sent = true;
+          form.submit();
+          return;
+        }
+        if (finished) return;
+        finished = true;
+        clearTimeout(timeout);
+        frame.remove();
+        form.remove();
+        resolve();
+      });
+      document.body.append(frame, form);
+      frame.src = 'about:blank';
+    });
+  }
+
+  function jsonp(url, parameters = {}) {
     return new Promise((resolve, reject) => {
       const callback = `__preguntado_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const script = document.createElement('script');
@@ -486,6 +572,7 @@
         reject(new Error('No se pudo abrir la conexión con la hoja.'));
       };
       const requestUrl = new URL(url);
+      Object.entries(parameters).forEach(([key, value]) => requestUrl.searchParams.set(key, String(value)));
       requestUrl.searchParams.set('callback', callback);
       requestUrl.searchParams.set('_', String(Date.now()));
       script.src = requestUrl.toString();
@@ -496,7 +583,8 @@
   async function fetchSheetRanking() {
     const endpoint = String(config.settings.sheetEndpoint || '').trim();
     if (!endpoint) return null;
-    const data = await jsonp(endpoint);
+    const data = await jsonp(endpoint, { action: 'ranking' });
+    if (data?.error) throw new Error(data.error);
     const rows = Array.isArray(data) ? data : data?.ranking;
     if (!Array.isArray(rows)) throw new Error('La respuesta de Google Sheets no tiene el formato esperado.');
     return rows.map((row) => ({
@@ -521,9 +609,9 @@
     } catch (error) {
       cloudRanking = null;
       renderRanking();
-      $('#ranking-connection').textContent = 'No se pudo actualizar la hoja';
+      $('#ranking-connection').textContent = error.message || 'No se pudo actualizar la hoja';
       $('#ranking-dot').classList.remove('connected');
-      showToast('No se pudo actualizar el ranking. Revisá la URL de Sheets.');
+      showToast(`No se pudo actualizar: ${error.message || 'revisá la URL de Sheets.'}`);
     } finally {
       button.disabled = false;
       button.textContent = 'Actualizar ranking';
@@ -963,12 +1051,13 @@
     }
     status.textContent = 'Probando conexión…';
     try {
-      const data = await jsonp(endpoint);
+      const data = await jsonp(endpoint, { action: 'ranking' });
+      if (data?.error) throw new Error(data.error);
       if (!Array.isArray(data) && !Array.isArray(data?.ranking)) throw new Error('Formato inesperado');
-      status.textContent = 'Conexión lista. La hoja respondió correctamente.';
+      status.textContent = 'Lectura conectada. Una partida confirmará también el envío de puntajes.';
       status.style.color = '#81eabf';
     } catch (error) {
-      status.textContent = 'No hubo respuesta. Revisá que el servicio esté implementado para cualquier usuario.';
+      status.textContent = error.message || 'Revisá la URL, el ID de la hoja y los permisos de implementación.';
       status.style.color = '#ffadba';
     }
   }
@@ -993,8 +1082,25 @@
     $('#player-name').addEventListener('keydown', (event) => { if (event.key === 'Enter') $('#start-game').click(); });
     $$('[data-go-home]').forEach((button) => button.addEventListener('click', () => showScreen('screen-home')));
     $('#home-link').addEventListener('click', (event) => { event.preventDefault(); if (!game) showScreen('screen-home'); });
-    $('#change-roulette').addEventListener('click', showRouletteSelection);
+    $('#change-roulette').addEventListener('click', () => {
+      if (!game) {
+        showRouletteSelection();
+        return;
+      }
+      if (!window.confirm('Cambiar de ruleta terminará esta partida. ¿Querés continuar?')) return;
+      cancelPendingQuestion();
+      if (game.answered > 0) {
+        finishGame();
+        return;
+      }
+      game = null;
+      currentQuestion = null;
+      activeRoulette = null;
+      $('#end-game').hidden = true;
+      showRouletteSelection();
+    });
     $('#spin-wheel').addEventListener('click', spinWheel);
+    $('#end-game').addEventListener('click', endGameEarly);
     $('#next-question').addEventListener('click', continueGame);
     $('#play-again').addEventListener('click', () => { game = null; showScreen('screen-home'); $('#player-name').focus(); });
     $('#finish-ranking').addEventListener('click', openRanking);
